@@ -4,7 +4,6 @@ const path = require('path');
 const axios = require('axios');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
-const qs = require('qs')
 
 const PLUGIN_NAME = 'homebridge-tauron-elicznik';
 const PLATFORM_NAME = 'tauroneLicznik';
@@ -50,7 +49,7 @@ module.exports = (api) => {
   }
   Characteristic.tauroneLicznikEnergyExport = tauroneLicznikEnergyExport;
 
-  class tauroneLicznikPowerAndEnergyService extends Service {
+  class tauroneLicznikEnergyService extends Service {
     constructor(displayName, subtype, ) {
       super(displayName, '00000001-000A-1000-8000-0026BB765291', subtype);
       // Mandatory Characteristics
@@ -59,7 +58,7 @@ module.exports = (api) => {
       this.addOptionalCharacteristic(Characteristic.tauroneLicznikEnergyExport);
     }
   }
-  Service.tauroneLicznikPowerAndEnergyService = tauroneLicznikPowerAndEnergyService;
+  Service.tauroneLicznikEnergyService = tauroneLicznikEnergyService;
 
   api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, tauroneLicznikPlatform, true);
 }
@@ -127,27 +126,6 @@ class eLicznikDevice {
     this.energyExport = 0;
 
     const prefDir = path.join(api.user.storagePath(), 'eLicznik');
-    const url = 'https://logowanie.tauron-dystrybucja.pl/login';
-    const chartUrl = 'https://elicznik.tauron-dystrybucja.pl/index/charts';
-    const headers = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:52.0) Gecko/20100101 Firefox/52.0'
-    };
-
-    const options = qs.stringify({
-      'username': this.user,
-      'password': this.password,
-      'service': 'https://elicznik.tauron-dystrybucja.pl'
-    });
-
-    this.axiosInstance = axios.create({
-      method: 'POST',
-      baseURL: url,
-      data: options,
-      headers: {
-        'content-type': 'application/x-www-form-urlencoded'
-      },
-      timeout: 5000,
-    });
 
     //check if the directory exists, if not then create it
     if (fs.existsSync(prefDir) == false) {
@@ -192,22 +170,20 @@ class eLicznikDevice {
   async updateDeviceState() {
     this.log.debug('Device: %s %s, requesting Device state.', this.meterId, this.name);
     try {
-      const response = await this.axiosInstance();
-      this.log.debug('Device: %s %s, debug response: %s', this.meterId, this.name, response.data);
-      const energyImport = response.data;
-      this.log(response.data)
+
+      const energyImport = 0;
       const energyExport = 0;
-      if (this.tasmotaService) {
-        this.tasmotaService
+      if (this.tauroneLicznikEnergyService) {
+        this.tauroneLicznikEnergyService
           .updateCharacteristic(Characteristic.tauroneLicznikEnergyImport, energyImport)
-          .updateCharacteristic(Characteristic.tauroneLicznikEnergyImport, energyExport);
+          .updateCharacteristic(Characteristic.tauroneLicznikEnergyExport, energyExport);
       }
       this.energyImport = energyImport;
       this.energyExport = energyExport;
 
       this.checkDeviceState = true;
     } catch (error) {
-      this.log.error('Device: %s %s, update Device state error: %s, state: Offline', this.meterId, this.name, error);
+      this.log.error('Device: %s %s, update Device state error: %s', this.meterId, this.name, error);
       this.checkDeviceState = false;
       this.checkDeviceInfo = true;
     }
@@ -240,10 +216,10 @@ class eLicznikDevice {
     accessory.addService(informationService);
 
     //Prepare service 
-    this.log.debug('prepareTasmotaService');
-    //power and energy production
-    const tauroneLicznikEnergyService = new Service.tauroneLicznikEnergyService('Power And Energy ', 'tauroneLicznikEnergyService');
-    tauroneLicznikEnergyService.getCharacteristic(Characteristic.tauroneLicznikEnergyImport)
+    this.log.debug('prepareTauroneLicznikService');
+    //power and energy
+    this.tauroneLicznikEnergyService = new Service.tauroneLicznikEnergyService('Meter ' + this.meterId, 'tauroneLicznikEnergyService');
+    this.tauroneLicznikEnergyService.getCharacteristic(Characteristic.tauroneLicznikEnergyImport)
       .onGet(async () => {
         const value = this.energyImport;
         if (!this.disableLogInfo) {
@@ -251,7 +227,7 @@ class eLicznikDevice {
         }
         return value;
       });
-    tauroneLicznikEnergyService.getCharacteristic(Characteristic.tauroneLicznikEnergyExport)
+    this.tauroneLicznikEnergyService.getCharacteristic(Characteristic.tauroneLicznikEnergyExport)
       .onGet(async () => {
         const value = this.energyExport;
         if (!this.disableLogInfo) {
@@ -259,7 +235,7 @@ class eLicznikDevice {
         }
         return value;
       });
-    accessory.addService(tauroneLicznikEnergyService);
+    accessory.addService(this.tauroneLicznikEnergyService);
 
     this.startPrepareAccessory = false;
     this.log.debug('Device: %s %s, publishExternalAccessories.', this.meterId, accessoryName);
