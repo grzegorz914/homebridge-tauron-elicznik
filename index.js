@@ -1,12 +1,19 @@
 'use strict';
 
 const path = require('path');
-const axios = require('axios');
 const fs = require('fs');
-const fsPromises = require('fs').promises;
+const fsPromises = fs.promises;
+const axios = require('axios');
 
 const PLUGIN_NAME = 'homebridge-tauron-elicznik';
 const PLATFORM_NAME = 'tauroneLicznik';
+
+const SERVICE_URL = 'https://elicznik.tauron-dystrybucja.pl';
+const LOGIN_URL = 'https://logowanie.tauron-dystrybucja.pl/login';
+const CHARTS_URL = 'https://elicznik.tauron-dystrybucja.pl/index/charts';
+const HEADERS = {
+  'content-type': 'application/x-www-form-urlencoded'
+};
 
 let Accessory, Characteristic, Service, Categories, UUID;
 
@@ -128,7 +135,7 @@ class eLicznikDevice {
     const prefDir = path.join(api.user.storagePath(), 'eLicznik');
 
     //check if the directory exists, if not then create it
-    if (fs.existsSync(prefDir) == false) {
+    if (!fs.existsSync(prefDir)) {
       fsPromises.mkdir(prefDir);
     }
 
@@ -170,6 +177,17 @@ class eLicznikDevice {
   async updateDeviceState() {
     this.log.debug('Device: %s %s, requesting Device state.', this.meterId, this.name);
     try {
+      const url = CHARTS_URL + '?dane[chartYear]=2021&dane[paramType]=year&dane[checkOZE]=on&dane[smartNr]=' + this.meterId;
+      const payload = {
+        username: this.user,
+        password: this.passwd,
+        service: SERVICE_URL
+      };
+      const options = {
+        method: 'POST',
+        data: payload,
+        headers: HEADERS
+      };
 
       const energyImport = 0;
       const energyExport = 0;
